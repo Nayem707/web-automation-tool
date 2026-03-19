@@ -1,0 +1,7 @@
+{
+  "ignore": ["src/data/*", "*.log", "*.json.backup*"],
+  "ext": "js,json",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

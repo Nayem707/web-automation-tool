@@ -1,13 +1,13 @@
-# NBA Players Scraper API
+# NBA Web Automation Tool - API
 
-A production-ready Node.js + Express application that scrapes NBA players from the official NBA Stats API with enhanced architecture for handling 5,000+ players reliably.
+A production-ready Node.js + Express application for web scraping and NBA player data management. Features dual scraping modes: general URL scraping for JSON data and specialized NBA player scraping from official NBA sources.
 
 ## 📖 Documentation
 
-- **[Developer Quick Start Guide](DEVELOPER_GUIDE.md)** - Get up and running in 5 minutes
-- **[Complete Documentation](COMPLETE_DOCUMENTATION.md)** - Comprehensive API reference and development guide
-- **[Project Summary](PROJECT_SUMMARY.md)** - Executive overview and technical architecture
-- **[Enhanced Scraping Guide](ENHANCED_SCRAPING_GUIDE.md)** - Production deployment and optimization
+- **[Complete Documentation](docs/COMPLETE_DOCUMENTATION.md)** - Comprehensive API reference and development guide
+- **[Web Scraper Guide](docs/WEB_SCRAPER_GUIDE.md)** - General web scraping functionality
+- **[NBA Manual Scraper Guide](docs/NBA_MANUAL_SCRAPER_GUIDE.md)** - NBA-specific scraping features
+- **[Roster Scraper Guide](docs/ROSTER_SCRAPER_GUIDE.md)** - Complete league roster scraping (5000+ players)
 
 ## ⚡ Quick Start
 
@@ -21,24 +21,50 @@ npm run dev
 # Test the API
 curl http://localhost:3001/api/health
 
-# Start enhanced scraping
-curl http://localhost:3001/api/enhanced/scrape
+# Scrape JSON data from any URL
+curl -X POST http://localhost:3001/api/scrape -H "Content-Type: application/json" -d "{\"url\":\"https://example.com/data.json\"}"
+
+# Scrape NBA players
+curl -X POST http://localhost:3001/api/manual/scrape-nba
+
+# Get all players
+curl http://localhost:3001/api/manual/players
 ```
 
 ## 🏀 Features
 
-- **Scrape NBA Players**: Fetch current NBA players from official NBA Stats API
-- **Local JSON Storage**: Store and manage player data in local JSON files
-- **RESTful API**: Clean API endpoints for data access and management
-- **Clean Architecture**: Organized codebase following backend best practices
-- **Error Handling**: Comprehensive error handling and logging
+### Dual Scraping Modes
+
+- **General Web Scraper**: Scrape JSON data from any public URL endpoint
+- **NBA Manual Scraper**: Specialized scraping for NBA.com player data using Cheerio
+- **League Roster Scraper**: Comprehensive scraping of 5000+ NBA players with full statistics
+
+### Core Features
+
+- **RESTful API**: Clean API endpoints for scraping and data management
+- **Local JSON Storage**: Persistent storage in local JSON files with automatic backups
 - **Data Validation**: Robust data validation and transformation
-- **Rate Limiting**: Respectful API scraping with built-in delays
+- **Error Handling**: Comprehensive error handling and logging
+- **CORS Enabled**: Cross-origin resource sharing for frontend integration
+- **Clean Architecture**: Organized codebase following backend best practices
+- **Rate Limiting**: Respectful scraping with built-in delays
 - **Backup System**: Automatic backups before data operations
 
-## 🎯 How to Find NBA API Endpoints
+## 🎯 How to Use the Web Scraper
 
-Since NBA.com is React-based, follow these steps to find internal API endpoints:
+### General JSON Scraping
+
+The general scraper can fetch JSON data from any public URL endpoint:
+
+```bash
+curl -X POST http://localhost:3001/api/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://api.example.com/data.json"}'
+```
+
+### NBA-Specific Scraping
+
+For NBA data, use the manual scraper which uses Cheerio to parse NBA.com pages:
 
 1. **Open Browser DevTools**:
    - Go to https://www.nba.com/players
@@ -54,41 +80,50 @@ Since NBA.com is React-based, follow these steps to find internal API endpoints:
    - Common endpoints include:
      - `https://stats.nba.com/stats/commonallplayers`
      - `https://stats.nba.com/stats/playerindex`
-     - `https://stats.nba.com/stats/commonplayerinfo`
+     - `https://stats.nba.com/stats/leaguedashplayerstats`
 
-4. **Analyze Response Structure**:
-   - Click on API requests to see response format
-   - Note required headers and parameters
-
-Our scraper uses the `commonallplayers` endpoint which provides current player data in a structured format.
+4. **Use the Manual Scraper**:
+   - The manual scraper automatically handles NBA.com's structure
+   - Scrapes player information, statistics, and rosters
+   - Stores data in structured JSON format
 
 ## 📁 Project Structure
 
 ```
-nba-players-scraper/
+api/
 ├── package.json           # Project configuration and dependencies
-├── .env                   # Environment variables (create from .env.example)
-├── .env.example          # Environment variables template
+├── nodemon.json          # Nodemon configuration for development
 ├── README.md             # Project documentation
+├── docs/                 # Comprehensive documentation
+│   ├── COMPLETE_DOCUMENTATION.md
+│   ├── NBA_MANUAL_SCRAPER_GUIDE.md
+│   ├── ROSTER_SCRAPER_GUIDE.md
+│   └── WEB_SCRAPER_GUIDE.md
+├── scripts/              # Utility scripts
+│   └── scrape-rosters.js # Roster scraping script
 └── src/
-    ├── server.js         # Express server setup and middleware
-    ├── app.js           # Application entry point
+    ├── server.js         # Server entry point
+    ├── app.js           # Express application setup
     ├── config/
     │   └── index.js     # Configuration management
     ├── routes/
-    │   ├── index.js     # Main routes
-    │   └── players.js   # Player-specific routes
+    │   ├── index.js     # Main route aggregator
+    │   ├── scrape.routes.js    # General scraping routes
+    │   └── manual.route.js     # NBA manual scraping routes
     ├── controllers/
-    │   └── playersController.js  # Request handlers
+    │   ├── scrape.controller.js   # General scraping controller
+    │   └── manual.controller.js   # NBA scraping controller
     ├── services/
-    │   ├── nbaScraperService.js  # NBA API scraping logic
-    │   └── playersService.js     # Local data management
+    │   ├── scrape.service.js      # General scraping logic
+    │   └── manual.service.js      # NBA scraping logic with Cheerio
     ├── utils/
-    │   ├── fileUtils.js     # File operation utilities
-    │   ├── logger.js       # Logging utility
-    │   └── validationUtils.js  # Data validation helpers
-    └── data/
-        └── players.json    # Local player data storage (auto-created)
+    │   ├── fileUtils.js       # File operation utilities
+    │   ├── logger.js         # Logging utility
+    │   └── validationUtils.js # Data validation helpers
+    ├── data/
+    │   └── players.json      # Local player data storage (auto-created)
+    ├── debug/                # Debugging scripts
+    └── test/                 # Test files and examples
 ```
 
 ## 🚀 Installation
@@ -103,7 +138,7 @@ nba-players-scraper/
 1. **Clone and Navigate**:
 
    ```bash
-   cd nba-players-scraper
+   cd web-automation-tool/api
    ```
 
 2. **Install Dependencies**:
@@ -112,15 +147,12 @@ nba-players-scraper/
    npm install
    ```
 
-3. **Configure Environment**:
+3. **Configure Environment** (Optional):
 
    ```bash
-   # Copy environment template
-   cp .env.example .env
-
-   # Edit .env file with your preferred settings
-   # PORT=3000 (server port)
-   # NODE_ENV=development
+   # Create .env file if needed
+   PORT=3001
+   NODE_ENV=development
    ```
 
 4. **Start Development Server**:
@@ -144,9 +176,12 @@ npm run dev
 
 # Production mode
 npm start
+
+# Run roster scraping script
+npm run scrape:rosters
 ```
 
-The server will start on `http://localhost:3000` (default port).
+The server will start on `http://localhost:3001` (default port).
 
 ### API Endpoints
 
@@ -163,97 +198,86 @@ GET /api/health
   "success": true,
   "message": "NBA Players Scraper API is healthy",
   "timestamp": "2024-03-03T10:30:00.000Z",
-  "version": "1.0.0"
+  "version": "2.0.0-enhanced"
 }
 ```
 
-#### 2. Scrape NBA Players
+#### 2. General URL Scraping
 
 ```http
-GET /api/players/scrape
+POST /api/scrape
+Content-Type: application/json
+
+{
+  "url": "https://example.com/api/data.json"
+}
 ```
 
-Scrapes current NBA players from the official API and stores them locally.
+Scrapes JSON data from any public URL endpoint.
 
 **Response:**
 
 ```json
 {
   "success": true,
-  "message": "Players scraped and stored successfully",
+  "message": "Data scraped successfully",
   "data": {
-    "scrapedCount": 450,
-    "newPlayersAdded": 25,
-    "duplicatesSkipped": 425,
-    "totalPlayers": 450,
-    "timestamp": "2024-03-03T10:30:00.000Z"
-  }
-}
-```
-
-#### 3. Get All Players
-
-```http
-GET /api/players
-GET /api/players?team=Lakers&position=PG&limit=10&offset=0
-```
-
-**Query Parameters:**
-
-- `team`: Filter by team name
-- `position`: Filter by position (PG, SG, SF, PF, C)
-- `isActive`: Filter by active status (true/false)
-- `limit`: Number of results to return
-- `offset`: Number of results to skip (for pagination)
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "message": "Players retrieved successfully",
-  "data": {
-    "players": [
-      {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "firstName": "LeBron",
-        "lastName": "James",
-        "team": "Los Angeles Lakers",
-        "era": "2020s",
-        "position": "SF",
-        "image": "https://cdn.nba.com/headshots/nba/latest/1040x760/2544.png",
-        "height": "206cm",
-        "weight": "113kg",
-        "birthDate": "1984-12-30",
-        "nationality": "USA",
-        "yearsActive": "2003-present",
-        "championships": 4,
-        "biography": null,
-        "avgPoints": null,
-        "avgRebounds": null,
-        "avgAssists": null,
-        "difficulty": 1,
-        "isActive": true,
-        "addedBy": null,
-        "createdAt": "2024-03-03T10:30:00.000Z",
-        "updatedAt": "2024-03-03T10:30:00.000Z"
-      }
-    ],
-    "pagination": {
-      "total": 450,
-      "limit": 10,
-      "offset": 0,
-      "hasMore": true
+    "url": "https://example.com/api/data.json",
+    "scrapedData": {
+      /* ... scraped JSON data ... */
     },
     "timestamp": "2024-03-03T10:30:00.000Z"
   }
 }
 ```
 
-#### 4. Get Player by ID
+#### 3. Scrape NBA Players (Manual)
 
 ```http
-GET /api/players/:id
+POST /api/manual/scrape-nba
+```
+
+Scrapes NBA players using Cheerio from NBA.com pages.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "NBA players scraped successfully",
+  "data": {
+    "totalPlayers": 450,
+    "newPlayers": 25,
+    "timestamp": "2024-03-03T10:30:00.000Z"
+  }
+}
+```
+
+#### 4. Scrape League Roster (5000+ Players)
+
+```http
+POST /api/manual/scrape-league-roster
+```
+
+Comprehensive scraping of the complete NBA League Roster with full player data.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "League roster scraped successfully",
+  "data": {
+    "totalPlayers": 5122,
+    "timestamp": "2024-03-03T10:30:00.000Z"
+  }
+}
+```
+
+#### 5. Get All Players
+
+```http
+GET /api/manual/players
 ```
 
 **Response:**
@@ -261,18 +285,41 @@ GET /api/players/:id
 ```json
 {
   "success": true,
-  "message": "Player retrieved successfully",
   "data": {
-    "player": { ... },
-    "timestamp": "2024-03-03T10:30:00.000Z"
+    "players": [
+      {
+        "id": "uuid",
+        "firstName": "LeBron",
+        "lastName": "James",
+        "team": "Los Angeles Lakers",
+        "position": "SF",
+        "height": "206cm",
+        "weight": "113kg",
+        "isActive": true
+        /* ... more player data ... */
+      }
+    ],
+    "total": 450
   }
 }
 ```
 
-#### 5. Search Players
+#### 6. Get Players by Team
 
 ```http
-GET /api/players/search?firstName=LeBron&team=Lakers
+GET /api/manual/players/team/:teamName
+```
+
+**Example:**
+
+```http
+GET /api/manual/players/team/Lakers
+```
+
+#### 7. Search Players
+
+```http
+GET /api/manual/players/search?firstName=LeBron&lastName=James
 ```
 
 **Query Parameters:**
@@ -280,43 +327,22 @@ GET /api/players/search?firstName=LeBron&team=Lakers
 - `firstName`: Search by first name
 - `lastName`: Search by last name
 - `team`: Search by team name
-- `position`: Search by position
-- `isActive`: Search by active status (true/false)
 
-#### 6. Storage Statistics
+#### 8. Get Scraping Status
 
 ```http
-GET /api/players/stats
+GET /api/manual/status
 ```
 
-**Response:**
+Returns current scraping statistics and status information.
 
-```json
-{
-  "success": true,
-  "message": "Storage statistics retrieved successfully",
-  "data": {
-    "stats": {
-      "totalPlayers": 450,
-      "fileExists": true,
-      "filePath": "./src/data/players.json",
-      "activePlayers": 430,
-      "inactivePlayers": 20,
-      "teams": 30,
-      "positions": 5
-    },
-    "timestamp": "2024-03-03T10:30:00.000Z"
-  }
-}
-```
-
-#### 7. Clear All Data
+#### 9. Get Statistics Summary
 
 ```http
-DELETE /api/players
+GET /api/manual/stats/summary
 ```
 
-Clears all player data (creates backup first).
+Returns comprehensive statistics about stored player data.
 
 ## 🏗️ Architecture
 
@@ -348,16 +374,28 @@ The application includes comprehensive error handling:
 
 ## 🔧 Configuration
 
-Environment variables in `.env`:
+Configuration is managed in `src/config/index.js`:
+
+```javascript
+module.exports = {
+  port: process.env.PORT || 3001,
+  nodeEnv: process.env.NODE_ENV || "development",
+  dataFilePath: "./src/data/players.json",
+  nbaApiBaseUrl: "https://www.nba.com",
+  requestDelay: 1000, // ms between requests
+};
+```
+
+Environment variables (optional `.env` file):
 
 ```bash
 # Server Configuration
-PORT=3000
+PORT=3001
 NODE_ENV=development
 
 # NBA API Configuration
-NBA_API_BASE_URL=https://www.nba.com/stats/players/list
-NBA_PLAYERS_ENDPOINT=https://stats.nba.com/stats/playerindex
+NBA_API_BASE_URL=https://www.nba.com
+NBA_PLAYERS_PAGE=https://www.nba.com/players
 
 # File Storage
 DATA_FILE_PATH=./src/data/players.json
@@ -403,50 +441,79 @@ Each player object follows this exact schema:
 
 ```bash
 # Health check
-curl http://localhost:3000/api/health
+curl http://localhost:3001/api/health
 
-# Scrape players
-curl http://localhost:3000/api/players/scrape
+# General URL scraping
+curl -X POST http://localhost:3001/api/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://jsonplaceholder.typicode.com/users"}'
+
+# Scrape NBA players
+curl -X POST http://localhost:3001/api/manual/scrape-nba
+
+# Scrape complete league roster
+curl -X POST http://localhost:3001/api/manual/scrape-league-roster
 
 # Get all players
-curl http://localhost:3000/api/players
+curl http://localhost:3001/api/manual/players
 
 # Search Lakers players
-curl "http://localhost:3000/api/players/search?team=Lakers"
+curl "http://localhost:3001/api/manual/players/team/Lakers"
 
-# Get storage stats
-curl http://localhost:3000/api/players/stats
+# Get scraping status
+curl http://localhost:3001/api/manual/status
 ```
 
 ### Using JavaScript (fetch)
 
 ```javascript
-// Scrape NBA players
-const scrapeResponse = await fetch("http://localhost:3000/api/players/scrape");
+// General URL scraping
+const scrapeResponse = await fetch("http://localhost:3001/api/scrape", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ url: "https://api.example.com/data.json" }),
+});
 const scrapeData = await scrapeResponse.json();
-console.log("Scraped players:", scrapeData);
+
+// Scrape NBA players
+const nbaResponse = await fetch("http://localhost:3001/api/manual/scrape-nba", {
+  method: "POST",
+});
+const nbaData = await nbaResponse.json();
 
 // Get all players
-const playersResponse = await fetch("http://localhost:3000/api/players");
+const playersResponse = await fetch("http://localhost:3001/api/manual/players");
 const playersData = await playersResponse.json();
-console.log("All players:", playersData.data.players);
 
 // Search for specific players
 const searchResponse = await fetch(
-  "http://localhost:3000/api/players/search?firstName=LeBron",
+  "http://localhost:3001/api/manual/players/search?firstName=LeBron",
 );
 const searchData = await searchResponse.json();
-console.log("Search results:", searchData.data.players);
 ```
 
 ## 🏆 Production Considerations
 
-- **Rate Limiting**: Respects NBA API with built-in delays
+- **Dual Scraping Modes**: General JSON scraping + NBA-specific scraping with Cheerio
+- **Rate Limiting**: Respects target websites with built-in delays between requests
 - **Error Recovery**: Continues processing even if individual requests fail
 - **Data Validation**: Ensures data quality and consistency
 - **Backup System**: Automatic backups before destructive operations
 - **Logging**: Comprehensive logging for debugging and monitoring
+- **CORS Enabled**: Ready for frontend integration
 - **Graceful Shutdown**: Proper cleanup on application termination
+
+## 🔄 Available Scripts
+
+```bash
+npm start              # Start production server
+npm run dev           # Start development server with nodemon
+npm run scrape:rosters # Run roster scraping script
+npm run scrape:preview # Preview roster scraping (dry run)
+npm run scrape:team   # Scrape specific team roster
+npm run test:roster   # Test roster scraper
+npm run test:scraper  # Test general scraper
+```
 
 ## 🤝 Contributing
 
@@ -462,10 +529,11 @@ This project is licensed under the ISC License.
 
 ## 🙏 Acknowledgments
 
-- NBA.com for providing the player data API
+- NBA.com for providing player data
+- Cheerio library for HTML parsing and web scraping
 - Express.js and Node.js communities for excellent documentation
 - All contributors who help improve this project
 
 ---
 
-**Built with ❤️ for basketball fans and developers**
+**Built with ❤️ for web automation and basketball enthusiasts**

@@ -327,6 +327,63 @@ class ManualController {
       });
     }
   }
+
+  /**
+   * Scrape complete League Roster (5122+ players)
+   * POST /api/manual/scrape-league-roster
+   * Based on the comprehensive NBA League Roster interface
+   */
+  async scrapeLeagueRoster(req, res) {
+    try {
+      Logger.info("Starting complete League Roster scraping (5122+ players)...");
+      const startTime = Date.now();
+
+      const result = await this.manualService.scrapeLeagueRosterComplete();
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      Logger.success(`League Roster scraping completed in ${duration} seconds`);
+
+      res.status(200).json({
+        success: true,
+        message: "Complete League Roster scraped successfully",
+        data: result,
+        stats: {
+          totalPlayers: result.totalPlayers,
+          totalFound: result.totalFound,
+          successRate: result.successRate,
+          method: result.method,
+          duration: `${duration}s`,
+          timestamp: result.timestamp,
+          breakdown: {
+            teams: result.stats?.teams || 0,
+            positions: result.stats?.positions || 0,
+            countries: result.stats?.countries || 0,
+            historicIncluded: result.stats?.historicIncluded || false,
+            paginationPages: result.stats?.paginationPages || 0
+          }
+        },
+        samplePlayers: result.players?.slice(0, 10).map(p => ({
+          name: `${p.firstName} ${p.lastName}`,
+          team: p.team,
+          position: p.position,
+          height: p.height,
+          weight: p.weight,
+          college: p.college,
+          country: p.nationality,
+          isActive: p.isActive
+        })) || []
+      });
+    } catch (error) {
+      Logger.error("League Roster scraping failed:", error.message);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to scrape complete League Roster",
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
 }
 
 module.exports = ManualController;

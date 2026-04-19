@@ -7,6 +7,8 @@ const manualController = new ManualController();
 // Bind controller methods to preserve 'this' context
 const scrapeNBAPlayers =
   manualController.scrapeNBAPlayers.bind(manualController);
+const scrapeLeagueRoster = 
+  manualController.scrapeLeagueRoster.bind(manualController);
 const getPlayers = manualController.getPlayers.bind(manualController);
 const getStatus = manualController.getStatus.bind(manualController);
 const getPlayersByTeam =
@@ -20,6 +22,14 @@ const getStatsSummary = manualController.getStatsSummary.bind(manualController);
  * @access Public
  */
 router.post("/scrape-nba", scrapeNBAPlayers);
+
+/**
+ * @route POST /api/manual/scrape-league-roster
+ * @desc Scrape complete League Roster (5122+ players with full data)
+ * @desc Based on the comprehensive NBA League Roster interface
+ * @access Public
+ */
+router.post("/scrape-league-roster", scrapeLeagueRoster);
 
 /**
  * @route GET /api/manual/players

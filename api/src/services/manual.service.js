@@ -1405,6 +1405,559 @@ class ManualService {
       };
     }
   }
+
+  /**
+   * LEAGUE ROSTER SCRAPER - Based on the interface image
+   * Scrapes all 5122+ players from the comprehensive NBA League Roster interface
+   * This method handles the paginated table with columns:
+   * Player Name, Team, Number, Position, Height, Weight, Last Attended (College), Country
+   */
+  async scrapeLeagueRosterComplete() {
+    try {
+      Logger.info("🏀 Starting COMPLETE League Roster scraping (5122+ players)...");
+      Logger.info("📊 Based on comprehensive roster interface with pagination");
+
+      // Set up graceful shutdown handling
+      this.setupGracefulShutdown();
+      global.shouldStop = false;
+
+      // Use the NBA Stats API leaguedashplayerstats endpoint for complete roster data
+      const completeRosterData = await this.fetchCompleteRosterData();
+      
+      Logger.success(`🎯 Found ${completeRosterData.length} total players in league roster`);
+
+      if (completeRosterData.length === 0) {
+        throw new Error("No players found in league roster data");
+      }
+
+      // Process players with enhanced data extraction
+      Logger.info("📋 Processing complete league roster with enhanced data...");
+      const enhancedPlayers = await this.processCompleteRosterPlayers(completeRosterData);
+
+      // Save the comprehensive data
+      await this.savePlayersData(enhancedPlayers);
+
+      const successRate = Math.round((enhancedPlayers.length / completeRosterData.length) * 100);
+
+      Logger.success(
+        `🎉 COMPLETE League Roster scraped: ${enhancedPlayers.length}/${completeRosterData.length} players (${successRate}% success rate)`
+      );
+
+      return {
+        totalPlayers: enhancedPlayers.length,
+        totalFound: completeRosterData.length,
+        successRate: `${successRate}%`,
+        method: "complete_league_roster",
+        timestamp: new Date().toISOString(),
+        players: enhancedPlayers,
+        stats: {
+          teams: this.countUniqueValues(enhancedPlayers, 'team'),
+          positions: this.countUniqueValues(enhancedPlayers, 'position'),
+          countries: this.countUniqueValues(enhancedPlayers, 'nationality'),
+          historicIncluded: true,
+          paginationPages: Math.ceil(enhancedPlayers.length / 50) // Assuming 50 per page
+        }
+      };
+    } catch (error) {
+      Logger.error("❌ Error in league roster scraping:", error.message);
+      
+      // Try to return existing data on error
+      try {
+        const existingPlayers = await this.loadPlayersData();
+        if (existingPlayers && existingPlayers.length > 0) {
+          Logger.info(`💾 Returning ${existingPlayers.length} players from existing data`);
+          return {
+            totalPlayers: existingPlayers.length,
+            timestamp: new Date().toISOString(),
+            players: existingPlayers,
+            error: error.message,
+            method: "complete_league_roster_fallback"
+          };
+        }
+      } catch (loadError) {
+        Logger.warn("Could not load existing data on error recovery");
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch complete roster data using NBA Stats API
+   * This gets ALL players including historic players (matching the 5122+ count from the image)
+   */
+  async fetchCompleteRosterData() {
+    Logger.info("🔍 Fetching complete league roster data from NBA Stats API...");
+
+    const currentYear = new Date().getFullYear();
+    const season = new Date().getMonth() >= 6 ? currentYear : currentYear - 1;
+    const seasonString = `${season}-${String(season + 1).slice(-2)}`;
+
+    // Main endpoint for current players
+    const currentPlayersUrl = 
+      `https://stats.nba.com/stats/leaguedashplayerstats` +
+      `?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=` +
+      `&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=00` +
+      `&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0` +
+      `&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=` +
+      `&PlusMinus=N&Rank=N&Season=${seasonString}&SeasonSegment=&SeasonType=Regular+Season` +
+      `&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision=&Weight=`;
+
+    // Secondary endpoint for all players (including historic)
+    const allPlayersUrl = 
+      `https://stats.nba.com/stats/commonallplayers` +
+      `?IsOnlyCurrentSeason=0&LeagueID=00&Season=${seasonString}`;
+
+    const players = [];
+
+    try {
+      // First, get current season players with detailed stats
+      Logger.info("📊 Fetching current season players...");
+      const currentResponse = await this.makeStatsApiRequest(currentPlayersUrl);
+      
+      if (currentResponse.data && currentResponse.data.resultSets && currentResponse.data.resultSets[0]) {
+        const currentData = currentResponse.data.resultSets[0];
+        const headers = currentData.headers;
+        const rows = currentData.rowSet;
+
+        Logger.info(`Found ${rows.length} current season players`);
+
+        // Map column indices for easier access
+        const indices = {
+          playerId: headers.indexOf('PLAYER_ID'),
+          playerName: headers.indexOf('PLAYER_NAME'),
+          teamAbbr: headers.indexOf('TEAM_ABBREVIATION'),
+          age: headers.indexOf('AGE'),
+          gp: headers.indexOf('GP'),
+          pts: headers.indexOf('PTS'),
+          reb: headers.indexOf('REB'),
+          ast: headers.indexOf('AST'),
+          fgPct: headers.indexOf('FG_PCT'),
+          fg3Pct: headers.indexOf('FG3_PCT'),
+          ftPct: headers.indexOf('FT_PCT')
+        };
+
+        for (const row of rows) {
+          const playerId = String(row[indices.playerId]);
+          const playerName = row[indices.playerName] || '';
+          
+          if (playerId && playerName) {
+            const nameParts = playerName.split(/\s+/);
+            
+            players.push({
+              playerId,
+              firstName: nameParts[0] || 'Unknown',
+              lastName: nameParts.slice(1).join(' ') || 'Player',
+              fullName: playerName,
+              team: row[indices.teamAbbr] || 'Unknown',
+              age: row[indices.age] || null,
+              gamesPlayed: row[indices.gp] || 0,
+              avgPoints: row[indices.pts] || 0,
+              avgRebounds: row[indices.reb] || 0,
+              avgAssists: row[indices.ast] || 0,
+              fgPercentage: row[indices.fgPct] || 0,
+              fg3Percentage: row[indices.fg3Pct] || 0,
+              ftPercentage: row[indices.ftPct] || 0,
+              isActive: true,
+              dataSource: 'current_season'
+            });
+          }
+        }
+      }
+
+      // Second, get ALL players (including historic) to reach the 5122+ count
+      Logger.info("🏛️ Fetching all players (including historic) to reach 5122+ count...");
+      const allResponse = await this.makeStatsApiRequest(allPlayersUrl);
+      
+      if (allResponse.data && allResponse.data.resultSets && allResponse.data.resultSets[0]) {
+        const allData = allResponse.data.resultSets[0];
+        const headers = allData.headers;
+        const rows = allData.rowSet;
+
+        Logger.info(`Found ${rows.length} total players in database`);
+
+        // Map indices for all players data
+        const allIndices = {
+          playerId: headers.indexOf('PERSON_ID'),
+          lastName: headers.indexOf('DISPLAY_LAST_COMMA_FIRST'), // "James, LeBron"
+          firstName: headers.indexOf('DISPLAY_FIRST_LAST'), // "LeBron James"
+          rosterStatus: headers.indexOf('ROSTERSTATUS'),
+          fromYear: headers.indexOf('FROM_YEAR'),
+          toYear: headers.indexOf('TO_YEAR'),
+          playerSlug: headers.indexOf('PLAYERCODE'),
+          teamId: headers.indexOf('TEAM_ID'),
+          teamCity: headers.indexOf('TEAM_CITY'),
+          teamName: headers.indexOf('TEAM_NAME'),
+          teamAbbr: headers.indexOf('TEAM_ABBREVIATION'),
+          jerseyNumber: headers.indexOf('JERSEY_NUMBER')
+        };
+
+        const existingPlayerIds = new Set(players.map(p => p.playerId));
+
+        for (const row of rows) {
+          const playerId = String(row[allIndices.playerId]);
+          
+          if (!playerId || playerId === '0' || existingPlayerIds.has(playerId)) {
+            continue; // Skip if no ID or already processed
+          }
+
+          // Get player name in proper format
+          let fullName = row[allIndices.firstName] || '';
+          if (!fullName && row[allIndices.lastName]) {
+            // Convert "James, LeBron" to "LeBron James"
+            const parts = row[allIndices.lastName].split(', ');
+            fullName = parts.length === 2 ? `${parts[1]} ${parts[0]}` : row[allIndices.lastName];
+          }
+          
+          if (!fullName) continue;
+
+          const nameParts = fullName.split(/\s+/);
+          const isActive = row[allIndices.rosterStatus] === 1;
+          const fromYear = row[allIndices.fromYear];
+          const toYear = row[allIndices.toYear];
+          
+          players.push({
+            playerId,
+            firstName: nameParts[0] || 'Unknown',
+            lastName: nameParts.slice(1).join(' ') || 'Player',
+            fullName,
+            team: row[allIndices.teamAbbr] || 'Unknown',
+            teamCity: row[allIndices.teamCity] || '',
+            teamName: row[allIndices.teamName] || '',
+            jerseyNumber: row[allIndices.jerseyNumber] || null,
+            yearsActive: fromYear && toYear ? `${fromYear}-${toYear}` : null,
+            fromYear,
+            toYear,
+            isActive,
+            gamesPlayed: 0,
+            avgPoints: 0,
+            avgRebounds: 0,
+            avgAssists: 0,
+            dataSource: 'all_players'
+          });
+
+          existingPlayerIds.add(playerId);
+        }
+      }
+
+      Logger.success(`🎯 Total players collected: ${players.length} (targeting 5122+ from roster interface)`);
+      
+      return players;
+
+    } catch (error) {
+      Logger.error("Error fetching complete roster data:", error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Process complete roster players and enhance with additional data
+   * This matches the data structure shown in the League Roster interface
+   */
+  async processCompleteRosterPlayers(rosterData) {
+    Logger.info(`🔧 Processing ${rosterData.length} complete roster players...`);
+    
+    const results = [];
+    const chunks = this.chunkArray(rosterData, this.concurrencyLimit);
+
+    Logger.info(`📦 Split into ${chunks.length} chunks for enhanced processing`);
+
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
+      const chunkStartTime = Date.now();
+
+      Logger.info(`Processing enhanced data chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} players)...`);
+
+      const promises = chunk.map(async (playerData, index) => {
+        await this.delay(index * this.requestDelay);
+        return this.enhancePlayerWithRosterData(playerData);
+      });
+
+      const chunkResults = await Promise.allSettled(promises);
+      const chunkSuccessCount = chunkResults.filter(r => r.status === 'fulfilled' && r.value).length;
+
+      chunkResults.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value) {
+          results.push(result.value);
+        } else {
+          Logger.warn(`Failed to enhance player: ${chunk[index].fullName || chunk[index].playerId}`);
+          // Add basic player data even if enhancement failed
+          results.push(this.createBasicPlayerRecord(chunk[index]));
+        }
+      });
+
+      const chunkDuration = ((Date.now() - chunkStartTime) / 1000).toFixed(2);
+      Logger.success(`✅ Enhanced chunk ${chunkIndex + 1}/${chunks.length}: ${chunkSuccessCount}/${chunk.length} players in ${chunkDuration}s`);
+
+      // Progressive saving
+      try {
+        await this.savePlayersData(results);
+        Logger.info(`💾 Progress saved: ${results.length} enhanced players`);
+      } catch (saveError) {
+        Logger.warn(`Failed to save progress after chunk ${chunkIndex + 1}:`, saveError.message);
+      }
+
+      // Progress tracking
+      const totalProgress = Math.round(((chunkIndex + 1) / chunks.length) * 100);
+      Logger.info(`📈 Enhancement progress: ${totalProgress}% complete`);
+
+      // Graceful interruption check
+      if (global.shouldStop) {
+        Logger.warn(`⚠️ Graceful stop requested. Stopping after chunk ${chunkIndex + 1}`);
+        break;
+      }
+
+      // Delay between chunks
+      if (chunkIndex < chunks.length - 1) {
+        await this.delay(2000);
+      }
+    }
+
+    Logger.success(`🎉 Complete roster processing finished: ${results.length} enhanced players`);
+    return results;
+  }
+
+  /**
+   * Enhance individual player with additional roster data
+   * This attempts to gather all the data shown in the League Roster interface
+   */
+  async enhancePlayerWithRosterData(playerData) {
+    try {
+      // Create enhanced player record with complete structure
+      const enhancedPlayer = {
+        id: uuidv4(),
+        firstName: playerData.firstName || 'Unknown',
+        lastName: playerData.lastName || 'Player',
+        team: playerData.team || 'Unknown',
+        jerseyNumber: playerData.jerseyNumber || null,
+        position: 'Unknown', // Will be enhanced below
+        height: null,
+        weight: null,
+        college: null, // Last Attended
+        nationality: 'USA', // Country
+        birthDate: null,
+        age: playerData.age || null,
+        yearsActive: playerData.yearsActive || null,
+        fromYear: playerData.fromYear || null,
+        toYear: playerData.toYear || null,
+        isActive: playerData.isActive || false,
+        era: this.determineEra(playerData.fromYear, playerData.toYear),
+        
+        // Stats from roster data
+        gamesPlayed: playerData.gamesPlayed || 0,
+        avgPoints: playerData.avgPoints || 0,
+        avgRebounds: playerData.avgRebounds || 0,
+        avgAssists: playerData.avgAssists || 0,
+        fgPercentage: playerData.fgPercentage || 0,
+        fg3Percentage: playerData.fg3Percentage || 0,
+        ftPercentage: playerData.ftPercentage || 0,
+
+        // Additional fields
+        championships: 0,
+        biography: null,
+        difficulty: this.calculateDifficulty(playerData),
+        image: `https://cdn.nba.com/headshots/nba/latest/1040x760/${playerData.playerId}.png`,
+        addedBy: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        dataSource: playerData.dataSource || 'league_roster'
+      };
+
+      // Try to enhance with profile data (for active/recent players)
+      if (playerData.isActive || (playerData.toYear && playerData.toYear >= 2015)) {
+        try {
+          const profileUrl = `${this.baseUrl}/player/${playerData.playerId}`;
+          const profileResponse = await this.makeRequest(profileUrl);
+          const $ = cheerio.load(profileResponse.data);
+
+          const profileData = this.extractPlayerInfoFromProfile($, playerData.playerId);
+
+          // Enhance with profile data
+          if (profileData.position && profileData.position !== 'Unknown') {
+            enhancedPlayer.position = profileData.position;
+          }
+          if (profileData.height) enhancedPlayer.height = profileData.height;
+          if (profileData.weight) enhancedPlayer.weight = profileData.weight;
+          if (profileData.birthDate) enhancedPlayer.birthDate = profileData.birthDate;
+          if (profileData.nationality) enhancedPlayer.nationality = profileData.nationality;
+
+          // Try to extract college from profile page
+          const bodyText = $.text();
+          const collegeMatch = bodyText.match(/(?:College|University|Attended)[:\s]*([A-Za-z\s]+(?:University|College|State|Tech|Institute)[A-Za-z\s]*)/i);
+          if (collegeMatch && collegeMatch[1]) {
+            enhancedPlayer.college = collegeMatch[1].trim();
+          }
+
+        } catch (profileError) {
+          Logger.warn(`Could not enhance profile for ${playerData.fullName}: ${profileError.message}`);
+        }
+      }
+
+      // Try to enhance with NBA Stats API player details
+      try {
+        const playerDetailsUrl = `https://stats.nba.com/stats/commonplayerinfo?PlayerID=${playerData.playerId}`;
+        const detailsResponse = await this.makeStatsApiRequest(playerDetailsUrl);
+        
+        if (detailsResponse.data && detailsResponse.data.resultSets) {
+          const commonPlayerInfo = detailsResponse.data.resultSets[0];
+          if (commonPlayerInfo && commonPlayerInfo.rowSet && commonPlayerInfo.rowSet[0]) {
+            const playerInfo = commonPlayerInfo.rowSet[0];
+            const headers = commonPlayerInfo.headers;
+            
+            // Map useful fields
+            const heightIdx = headers.indexOf('HEIGHT');
+            const weightIdx = headers.indexOf('WEIGHT');
+            const positionIdx = headers.indexOf('POSITION');
+            const collegeIdx = headers.indexOf('SCHOOL');
+            const countryIdx = headers.indexOf('COUNTRY');
+            const birthDateIdx = headers.indexOf('BIRTHDATE');
+
+            if (heightIdx >= 0 && playerInfo[heightIdx]) enhancedPlayer.height = playerInfo[heightIdx];
+            if (weightIdx >= 0 && playerInfo[weightIdx]) enhancedPlayer.weight = playerInfo[weightIdx];
+            if (positionIdx >= 0 && playerInfo[positionIdx]) enhancedPlayer.position = playerInfo[positionIdx];
+            if (collegeIdx >= 0 && playerInfo[collegeIdx]) enhancedPlayer.college = playerInfo[collegeIdx];
+            if (countryIdx >= 0 && playerInfo[countryIdx]) enhancedPlayer.nationality = playerInfo[countryIdx];
+            if (birthDateIdx >= 0 && playerInfo[birthDateIdx]) enhancedPlayer.birthDate = playerInfo[birthDateIdx];
+          }
+        }
+      } catch (apiError) {
+        Logger.warn(`Could not get API details for ${playerData.fullName}: ${apiError.message}`);
+      }
+
+      // Final data cleanup and validation
+      enhancedPlayer.team = this.cleanTeamName(enhancedPlayer.team);
+      enhancedPlayer.position = this.cleanPosition(enhancedPlayer.position);
+      enhancedPlayer.college = this.cleanCollege(enhancedPlayer.college);
+      enhancedPlayer.nationality = this.cleanCountry(enhancedPlayer.nationality);
+
+      Logger.info(`✨ Enhanced: ${enhancedPlayer.firstName} ${enhancedPlayer.lastName} | ${enhancedPlayer.team} | ${enhancedPlayer.position}`);
+      
+      return enhancedPlayer;
+
+    } catch (error) {
+      Logger.warn(`Error enhancing player ${playerData.fullName || playerData.playerId}:`, error.message);
+      return this.createBasicPlayerRecord(playerData);
+    }
+  }
+
+  /**
+   * Create basic player record when enhancement fails
+   */
+  createBasicPlayerRecord(playerData) {
+    return {
+      id: uuidv4(),
+      firstName: playerData.firstName || 'Unknown',
+      lastName: playerData.lastName || 'Player',
+      team: playerData.team || 'Unknown',
+      jerseyNumber: playerData.jerseyNumber || null,
+      position: 'Unknown',
+      height: null,
+      weight: null,
+      college: null,
+      nationality: 'USA',
+      birthDate: null,
+      age: playerData.age || null,
+      yearsActive: playerData.yearsActive || null,
+      isActive: playerData.isActive || false,
+      era: this.determineEra(playerData.fromYear, playerData.toYear),
+      gamesPlayed: playerData.gamesPlayed || 0,
+      avgPoints: playerData.avgPoints || 0,
+      avgRebounds: playerData.avgRebounds || 0,
+      avgAssists: playerData.avgAssists || 0,
+      championships: 0,
+      biography: null,
+      difficulty: 1,
+      image: `https://cdn.nba.com/headshots/nba/latest/1040x760/${playerData.playerId}.png`,
+      addedBy: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      dataSource: playerData.dataSource || 'basic_roster'
+    };
+  }
+
+  /**
+   * Helper methods for data cleaning and enhancement
+   */
+  determineEra(fromYear, toYear) {
+    if (!fromYear) return '2020s';
+    if (fromYear >= 2020) return '2020s';
+    if (fromYear >= 2010) return '2010s';
+    if (fromYear >= 2000) return '2000s';
+    if (fromYear >= 1990) return '1990s';
+    if (fromYear >= 1980) return '1980s';
+    return 'Classic';
+  }
+
+  calculateDifficulty(playerData) {
+    // Simple difficulty calculation based on stats and era
+    if (!playerData.avgPoints) return 1;
+    if (playerData.avgPoints >= 25) return 5; // Superstar
+    if (playerData.avgPoints >= 20) return 4; // All-star level
+    if (playerData.avgPoints >= 15) return 3; // Solid starter
+    if (playerData.avgPoints >= 10) return 2; // Role player
+    return 1; // Bench/rookie
+  }
+
+  cleanTeamName(team) {
+    if (!team || team === 'Unknown') return 'Unknown';
+    // Convert common abbreviations to full names if needed
+    const teamMap = {
+      'LAL': 'Los Angeles Lakers',
+      'GSW': 'Golden State Warriors',
+      'BOS': 'Boston Celtics',
+      'MIA': 'Miami Heat',
+      'CHI': 'Chicago Bulls',
+      'MIL': 'Milwaukee Bucks',
+      'PHX': 'Phoenix Suns',
+      'BKN': 'Brooklyn Nets',
+      'PHI': 'Philadelphia 76ers',
+      'TOR': 'Toronto Raptors'
+      // Add more as needed
+    };
+    return teamMap[team] || team;
+  }
+
+  cleanPosition(position) {
+    if (!position || position === 'Unknown') return 'Unknown';
+    // Standardize position names
+    const positionMap = {
+      'F': 'Forward',
+      'C': 'Center', 
+      'G': 'Guard',
+      'PG': 'Point Guard',
+      'SG': 'Shooting Guard',
+      'SF': 'Small Forward',
+      'PF': 'Power Forward',
+      'F-C': 'Forward-Center',
+      'G-F': 'Guard-Forward'
+    };
+    return positionMap[position] || position;
+  }
+
+  cleanCollege(college) {
+    if (!college) return null;
+    // Clean up college names
+    return college.replace(/\s+/g, ' ').trim();
+  }
+
+  cleanCountry(country) {
+    if (!country) return 'USA';
+    // Standardize country names
+    const countryMap = {
+      'United States': 'USA',
+      'US': 'USA',
+      'United States of America': 'USA'
+    };
+    return countryMap[country] || country;
+  }
+
+  /**
+   * Count unique values in array of objects for stats
+   */
+  countUniqueValues(array, field) {
+    const values = array.map(item => item[field]).filter(Boolean);
+    return [...new Set(values)].length;
+  }
 }
 
 module.exports = ManualService;

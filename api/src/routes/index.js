@@ -16,7 +16,6 @@ router.get("/health", (req, res) => {
 
 // Scraper routes
 router.use("/scrape", scrapeRoutes);
-
 // Manual NBA scraper routes
 router.use("/manual", manualRoutes);
 
